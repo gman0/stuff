@@ -1,0 +1,12 @@
+rewrite - destroys contents of a file(s)
+
+BUILDING
+========
+No dependencies needed, tested with gcc and MinGW.
+You can build rewrite simply by typing ie.:
+$ gcc rewrite.c -o rewrite -O3 -s
+
+USAGE
+=====
+Once you have built rewrite, you can run rewrite -h
+to get list of options.
