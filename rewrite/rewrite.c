@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
 		if (is_on(g_flags, A_DELETE))
 		{
 			for (i = optind; i < argc; i++)
-				list_dir(argv[i], 0, &delete);
+				list_dir(argv[i], 1, &delete);
 		}
 	}
 
