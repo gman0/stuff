@@ -16,13 +16,15 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <limits.h>
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
 #include <time.h>
 
 #define PACKAGE "rewrite"
-#define VERSION "1.3.0"
+#define VERSION "1.4.0"
 
 
 unsigned long g_block_size = 5242880;
@@ -41,6 +43,7 @@ void   delete(const char *file_name);
 void   fuck_file(const char *file_name);
 size_t block_size(size_t size, offset_t offset);
 void   fill_buffer_rand(char *buf, size_t len);
+void   list_dir(const char *dir_name, int passes, void (*callback)(const char *));
 
 typedef enum
 {
@@ -48,6 +51,7 @@ typedef enum
 	A_INTERACTIVE =		1 << 2,
 	A_YES_INTERACTIVE =	1 << 3,
 	A_DELETE =			1 << 4,
+	A_RECURSIVE =		1 << 8,
 	F_PATTERN_ONES =	1 << 5,
 	F_PATTERN_RANDOM =	1 << 6,
 	F_PATTERN_REGEN =	1 << 7
@@ -75,6 +79,7 @@ int main(int argc, char *argv[])
 		{"delete",		no_argument,		0,	'd'},
 		{"passes",		required_argument,	0,	'p'},
 		{"block-size",	required_argument,	0,	'b'},
+		{"recursive",	no_argument,		0,	  1},
 		{0,				0,					0,	  0}
 	};
 
@@ -127,6 +132,10 @@ int main(int argc, char *argv[])
 			case 'b':
 				g_block_size = atol(optarg);
 				break;
+
+			case 1:
+				g_flags |= A_RECURSIVE;
+				break;
 		}
 	}
 
@@ -146,30 +155,43 @@ int main(int argc, char *argv[])
 	bool interact[argc - 1];
 	memset(interact, 0, sizeof(bool) * (argc - 1));
 
-	int i;
-	for (i = optind; i < argc; i++)
+	if (!is_on(g_flags, A_RECURSIVE)) // no interaction for recursion...at least for now
 	{
-		/* first, we have to figure out if we want to
-		 * destroy the particular file */
-		if ((interact[i] = interactive(argv[i])))
-			fuck_file(argv[i]);
-	}
-
-	int pass = 1; // we have already made 1 pass
-	for (; pass < g_passes; pass++)
-	{
-		int j;
-		for (j = optind; j < argc; j++)
-			if (interact[j]) fuck_file(argv[j]);
-	}
-
-	/* it may seem quite stupid to loop trough
-	 * all the files again but this approach has
-	 * also it's possitives */
-	if (is_on(g_flags, A_DELETE))
-	{
+		int i;
 		for (i = optind; i < argc; i++)
-			if (interact[i]) delete(argv[i]);
+		{
+			/* first, we have to figure out if we want to
+			 * destroy the particular file */
+			if ((interact[i] = interactive(argv[i])))
+				fuck_file(argv[i]);
+		}
+
+		int pass = 1; // we have already made 1 pass
+		for (; pass < g_passes; pass++)
+		{
+			int j;
+			for (j = optind; j < argc; j++)
+				if (interact[j]) fuck_file(argv[j]);
+		}
+
+		// delete all the files if required
+		if (is_on(g_flags, A_DELETE))
+		{
+			for (i = optind; i < argc; i++)
+				if (interact[i]) delete(argv[i]);
+		}
+	}
+	else
+	{
+		int i;
+		for (i = optind; i < argc; i++)
+			list_dir(argv[i], g_passes, &fuck_file);
+
+		if (is_on(g_flags, A_DELETE))
+		{
+			for (i = optind; i < argc; i++)
+				list_dir(argv[i], 0, &delete);
+		}
 	}
 
 
@@ -198,7 +220,8 @@ void print_help(const char *prog_name)
 		   "\t-a  --always-rand\t\tuse 0's or 1's randomly and generate a new random pattern after each pass (can really slow down the proccess)\n"
 		   "\t-d  --delete\t\t\tdelete the file(s) too\n"
 		   "\t-p  --passes passes\t\tnumber of passes (defaults to 1)\n"
-		   "\t-b  --block-size block size\tsets block size (defaults to 5242880 bytes (5MB))\n",
+		   "\t-b  --block-size block size\tsets block size (defaults to 5242880 bytes (5MB))\n"
+		   "\t    --recursive\t\t\tsearch directories recursively\n",
 		   PACKAGE, prog_name);
 
 	exit(1);
@@ -258,7 +281,7 @@ bool interactive_answer(const char *answer, const char *lng, const char *shrt)
 void delete(const char *file_name)
 {
 	if (unlink(file_name) < 0) 
-		fprintf(stderr, "Cannot delete file \"%s\": %s\n", file_name, strerror(errno));
+		print_error(0, "Cannot delete file \"%s\": %s\n", file_name, strerror(errno));
 }
 
 void fuck_file(const char *file_name)
@@ -312,4 +335,49 @@ void fill_buffer_rand(char *buf, size_t len)
 		char byte = rand() % 2;
 		buf[i] = byte;
 	}
+}
+
+void list_dir(const char *dir_name, int passes, void (*callback)(const char *))
+{
+	DIR * dir = opendir(dir_name);
+
+	if (!dir)
+	{
+		print_error(0, "Cannot open directory \"%s\": %s\n", dir_name, strerror(errno));
+		return;
+	}
+
+	while (1)
+	{
+		struct dirent *entry = readdir(dir);
+		const char *d_name = entry->d_name;
+
+		if (!entry)
+			break; // No more entries in this directory.
+
+		/* Skip the "." and ".." */
+		if (strcmp(d_name, ".") && strcmp(d_name, ".."))
+		{
+			char path[PATH_MAX];
+			int path_length = snprintf(path, PATH_MAX, "%s/%s", dir_name, d_name);
+
+			if (path_length >= PATH_MAX)
+			{
+				print_error(0, "Path \"%s\" is too long (>=%d), skipping\n", path, PATH_MAX);
+				break;
+			}
+
+			if (entry->d_type & DT_DIR)
+				list_dir(path, passes, callback); // Recursively call list_dir with new path.
+			else
+			{
+				int i;
+				for (i = 0; i < passes; i++)
+					(*callback)(path);
+			}
+		}
+	}
+
+	if (closedir(dir))
+		print_error(0, "Cannot close \"%s\": %s\n", dir_name, strerror(errno));
 }
