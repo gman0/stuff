@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -33,6 +34,7 @@ typedef unsigned long offset_t;
 
 void   print_version();
 void   print_help(const char *prog_name);
+int    print_error(int code, const char *format, ...);
 bool   interactive(const char *file_name);
 bool   interactive_answer(const char *answer, const char *lng, const char *shrt);
 void   delete(const char *file_name);
@@ -202,6 +204,24 @@ void print_help(const char *prog_name)
 	exit(1);
 }
 
+int print_error(int code, const char *format, ...)
+{
+	int ret = 0;
+
+	if (!is_on(g_flags, A_QUIET))
+	{
+		va_list ap;
+		va_start(ap, format);
+		ret = vfprintf(stderr, format, ap);
+		va_end(ap);
+
+		if (code)
+			exit(code);
+	}
+
+	return ret;
+}
+
 bool interactive(const char *file_name)
 {
 	bool yes_interactive = is_on(g_flags, A_YES_INTERACTIVE);
@@ -247,9 +267,7 @@ void fuck_file(const char *file_name)
 
 	if (!file)
 	{
-		if (!is_on(g_flags, A_QUIET))
-			fprintf(stderr, "Cannot write to \"%s\": %s\n", file_name, strerror(errno));
-
+		print_error(0, "Cannot write to \"%s\": %s\n", file_name, strerror(errno));
 		return;
 	}
 
