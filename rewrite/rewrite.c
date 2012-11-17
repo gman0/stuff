@@ -57,11 +57,6 @@ typedef enum
 	F_PATTERN_REGEN =	1 << 7
 } flag_t;
 
-inline bool is_on(short flags, flag_t mask)
-{
-	return (flags & mask) == mask;
-}
-
 int main(int argc, char *argv[])
 {
 	if (argc < 2)
@@ -89,53 +84,18 @@ int main(int argc, char *argv[])
 	{
 		switch (c)
 		{
-			case 'h':
-				print_help(argv[0]);
-				break;
-
-			case 'v':
-				print_version();
-				break;
-
-			case 'q':
-				g_flags |= A_QUIET;
-				break;
-
-			case 'i':
-				g_flags |= A_INTERACTIVE;
-				break;
-
-			case 'y':
-				g_flags |= A_YES_INTERACTIVE;
-				break;
-
-			case 'o':
-				g_flags |= F_PATTERN_ONES;
-				break;
-
-			case 'r':
-				g_flags |= F_PATTERN_RANDOM;
-				break;
-			
-			case 'a':
-				g_flags |= F_PATTERN_RANDOM | F_PATTERN_REGEN;
-				break;
-
-			case 'd':
-				g_flags |= A_DELETE;
-				break;
-
-			case 'p':
-				g_passes = atoi(optarg);
-				break;
-
-			case 'b':
-				g_block_size = atol(optarg);
-				break;
-
-			case 1:
-				g_flags |= A_RECURSIVE;
-				break;
+			case 'h': print_help(argv[0]); break;
+			case 'v': print_version(); break;
+			case 'q': g_flags |= A_QUIET; break;
+			case 'i': g_flags |= A_INTERACTIVE; break;
+			case 'y': g_flags |= A_YES_INTERACTIVE; break;
+			case 'o': g_flags |= F_PATTERN_ONES; break;
+			case 'r': g_flags |= F_PATTERN_RANDOM; break;
+			case 'a': g_flags |= F_PATTERN_RANDOM | F_PATTERN_REGEN; break;
+			case 'd': g_flags |= A_DELETE; break;
+			case 'p': g_passes = atoi(optarg); break;
+			case 'b': g_block_size = atol(optarg); break;
+			case 1:   g_flags |= A_RECURSIVE; break;
 		}
 	}
 
@@ -145,9 +105,9 @@ int main(int argc, char *argv[])
 
 	g_block = (char*)malloc(g_block_size);
 
-	if (is_on(g_flags, F_PATTERN_RANDOM))
+	if (g_flags & F_PATTERN_RANDOM)
 		fill_buffer_rand(g_block, g_block_size);
-	else if (is_on(g_flags, F_PATTERN_ONES))
+	else if (g_flags & F_PATTERN_ONES)
 		memset(g_block, 1, g_block_size);
 	else
 		memset(g_block, 0, g_block_size);
@@ -155,7 +115,7 @@ int main(int argc, char *argv[])
 	bool interact[argc - 1];
 	memset(interact, 0, sizeof(bool) * (argc - 1));
 
-	if (!is_on(g_flags, A_RECURSIVE)) // no interaction for recursion...at least for now
+	if (!(g_flags & A_RECURSIVE)) // no interaction for recursion...at least for now
 	{
 		int i;
 		for (i = optind; i < argc; i++)
@@ -175,7 +135,7 @@ int main(int argc, char *argv[])
 		}
 
 		// delete all the files if required
-		if (is_on(g_flags, A_DELETE))
+		if (g_flags & A_DELETE)
 		{
 			for (i = optind; i < argc; i++)
 				if (interact[i]) delete(argv[i]);
@@ -187,7 +147,7 @@ int main(int argc, char *argv[])
 		for (i = optind; i < argc; i++)
 			list_dir(argv[i], g_passes, &fuck_file);
 
-		if (is_on(g_flags, A_DELETE))
+		if (g_flags & A_DELETE)
 		{
 			for (i = optind; i < argc; i++)
 				list_dir(argv[i], 1, &delete);
@@ -231,7 +191,7 @@ int print_error(int code, const char *format, ...)
 {
 	int ret = 0;
 
-	if (!is_on(g_flags, A_QUIET))
+	if (!(g_flags & A_QUIET))
 	{
 		va_list ap;
 		va_start(ap, format);
@@ -247,9 +207,9 @@ int print_error(int code, const char *format, ...)
 
 bool interactive(const char *file_name)
 {
-	bool yes_interactive = is_on(g_flags, A_YES_INTERACTIVE);
+	bool yes_interactive = g_flags & A_YES_INTERACTIVE;
 
-	if (!is_on(g_flags, A_INTERACTIVE) && !yes_interactive)
+	if (!(g_flags & A_INTERACTIVE) && !yes_interactive)
 		return true;
 
 	char answer[4];
@@ -313,7 +273,7 @@ void fuck_file(const char *file_name)
 
 	fclose(file);
 
-	if (is_on(g_flags, F_PATTERN_REGEN))
+	if (g_flags & F_PATTERN_REGEN)
 		fill_buffer_rand(g_block, g_block_size);
 }
 
